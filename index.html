@@ -1,0 +1,182 @@
+<html>
+<head>
+	
+	<title>OSM translate</title>
+
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css" integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ==" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js" integrity="sha512-GffPMF3RvMeYyc1LWMHtK8EbPv0iNZ8/oTtHPx9/cc2ILxQ+u905qIwdpULaqDkyBKgOaB57QTMg7ztg8Jm2Og==" crossorigin=""></script>
+
+	<script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+	<link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+	<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+	
+	<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.10.20/datatables.min.css"/>
+	<script type="text/javascript" src="https://cdn.datatables.net/v/dt/dt-1.10.20/datatables.min.js"></script>
+	
+<style>
+body {
+    margin: 0;
+}
+
+div.message {
+    background-color: rgba(11, 209, 244, .5);
+    padding: 5;
+    display: inline-block;
+    align: center;
+}
+
+div.message.error {
+    background-color: rgba(255, 51, 0, .5);
+}
+
+#consoleDiv {
+    position:absolute;
+    top:5;
+    margin-left: 20%;
+    width: 60%;
+    border: 0px solid #73AD21;
+    padding: 10px;
+    z-index:900;
+    text-align:center;
+}
+
+}
+</style>
+	
+</head>
+<body>
+
+<div id="tabs">
+  <ul>
+    <li title="ДТП"><a href="#tabs-1">Карта</a></li>
+    <li title="Сообщение"><a href="#tabs-2">Таблица</a></li>
+	<li title="Сообщение"><a href="#tabs-3">Запрос</a></li>
+  </ul>
+	<div id="tabs-1">
+    	<div id="myMap" style="width: 100%; height: 80%;">
+			Карта
+		</div>
+		<a id="load-button" class='ui-button'>Load data</a>
+	</div>
+    
+  <div id="tabs-2">
+    	<div id="myTable">
+<table id="table_id" class="display">
+    <thead>
+        <tr>
+            <th>Column 1</th>
+            <th>Column 2</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Row 1 Data 1</td>
+            <td>Row 1 Data 2</td>
+        </tr>
+        <tr>
+            <td>Row 2 Data 1</td>
+            <td>Row 2 Data 2</td>
+        </tr>
+    </tbody>
+</table>
+		</div>
+  </div>
+
+	<div id="tabs-3">
+    	<div>
+			<textarea id="request_form" rows="10" cols="100">
+
+node
+['place'~'.*']
+[name~'.*']
+['name:ru'!~'.*']
+({{bbox}})
+</textarea>
+		</div>
+		<a class='ui-button check-button'>Check request</a>
+	</div>
+
+</div>
+
+<script>
+$( "#tabs" ).tabs();
+$('#table_id').DataTable();
+var mymap = L.map('myMap').setView([59.023,30.123], 13);
+
+	var baseMap = L.tileLayer('https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw', {
+		maxZoom: 18,
+		attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, ' +
+			'<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
+			'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+		id: 'mapbox.streets'
+	}).addTo(mymap);
+
+	var osmMap = L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+	    attribution: 'Map data <a target="_blank" href="http://www.openstreetmap.org">OpenStreetMap.org</a> contributors, <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>',
+	})
+
+	var baseMaps = {
+		"Mapbox": baseMap,
+		"Openstreetmap": osmMap
+	};
+
+	L.control.layers(baseMaps).addTo(mymap);
+
+	function clearData() {
+	
+	}
+
+	function onLoadData(data) {
+		clearData();
+		els=data.elements;
+		els.forEach(function(el) {
+			text = 
+			L.marker([el.lat, el.lon]).bindPopup(JSON.stringify(el.tags)).addTo(mymap);
+		})
+	}
+
+    function buildOverpassApiUrl(map, overpassQuery) {
+        var bounds = map.getBounds().getSouth() + ',' + map.getBounds().getWest() + ',' + map.getBounds().getNorth() + ',' + map.getBounds().getEast();
+        var nodeQuery = 'node' + overpassQuery + '(' + bounds + ');';
+		wayQuery=''; relationQuery='';
+        //var wayQuery = 'way' + overpassQuery + '(' + bounds + ');';
+        //var relationQuery = 'relation[' + overpassQuery + '](' + bounds + ');';
+        var query = '?data=[out:json][timeout:15];(' + overpassQuery.replace('{{bbox}}',bounds) + ');out body geom;';
+        var baseUrl = 'http://overpass-api.de/api/interpreter';
+        var resultUrl = baseUrl + query;
+		console.log( resultUrl );
+        return resultUrl;
+    };
+
+	function get_overpass() {
+		var bounds = mymap.getBounds().getSouth() + ',' + mymap.getBounds().getWest() + ',' + mymap.getBounds().getNorth() + ',' + mymap.getBounds().getEast();
+		$.ajax({
+			url: 'http://overpass-api.de/api/interpreter',
+			data: '[out:json][timeout:15];' + $('#request_form').val().replace('{{bbox}}',bounds) + ';out body geom;',
+			dataType: 'json',
+			type: 'POST',
+			async: true,
+			crossDomain: true
+		}).done(function(data) {
+			console.log( data );
+			onLoadData(data);
+		}).fail(function(error) {
+			console.log(error);
+			console.log( "error" );
+		}).always(function() {
+			console.log( "complete" );
+		});
+	
+	}
+	
+	$( "#load-button" ).click( function( event ) {
+		  get_overpass()
+	} );
+
+</script>
+
+</body>
+</html>
